@@ -1,0 +1,209 @@
+jenkins:
+  systemMessage: |
+    Jenkins Playground - Docker Master/Slave Architecture
+    Managed by Jenkins Configuration as Code (JCasC)
+
+  numExecutors: 0
+  mode: EXCLUSIVE
+  labelString: "master"
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  remotingSecurity:
+    enabled: true
+
+  nodes:
+    # ── SSH Agent 1 ──
+    - permanent:
+        name: "ssh-agent-1"
+        labelString: "ssh-agent linux docker"
+        numExecutors: 2
+        mode: NORMAL
+        remoteFS: "/home/jenkins/agent"
+        retentionStrategy: "always"
+        launcher:
+          ssh:
+            host: "ssh-agent-1"
+            port: 22
+            credentialsId: "ssh-agent-key"
+            sshHostKeyVerificationStrategy:
+              nonVerifyingKeyVerificationStrategy: {}
+
+    # ── SSH Agent 2 ──
+    - permanent:
+        name: "ssh-agent-2"
+        labelString: "ssh-agent linux docker"
+        numExecutors: 2
+        mode: NORMAL
+        remoteFS: "/home/jenkins/agent"
+        retentionStrategy: "always"
+        launcher:
+          ssh:
+            host: "ssh-agent-2"
+            port: 22
+            credentialsId: "ssh-agent-key"
+            sshHostKeyVerificationStrategy:
+              nonVerifyingKeyVerificationStrategy: {}
+
+    # ── JNLP (Inbound) Agent 1 ──
+    - permanent:
+        name: "jnlp-agent-1"
+        labelString: "jnlp-agent linux docker"
+        numExecutors: 2
+        mode: NORMAL
+        remoteFS: "/home/jenkins/agent"
+        retentionStrategy: "always"
+        launcher:
+          jnlp:
+            workDirSettings:
+              disabled: false
+              failIfWorkDirIsMissing: false
+              internalDir: "remoting"
+
+  slaveAgentPort: 50000
+
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "PLAYGROUND"
+            value: "true"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "ssh-agent-key"
+              username: "jenkins"
+              description: "SSH key for Jenkins agents"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${jenkins_agent_key}"
+
+unclassified:
+  location:
+    url: "http://jenkins-master:8080/"
+
+jobs:
+  - script: |
+      pipelineJob('ssh-agent-test') {
+        description('Test pipeline running on SSH agents')
+        definition {
+          cps {
+            script("""
+              pipeline {
+                agent { label 'ssh-agent' }
+                stages {
+                  stage('System Info') {
+                    steps {
+                      echo "Hello from SSH Agent!"
+                      sh 'hostname'
+                      sh 'whoami'
+                      sh 'java -version'
+                      sh 'uname -a'
+                      sh 'cat /etc/os-release || true'
+                    }
+                  }
+                  stage('Workspace Test') {
+                    steps {
+                      writeFile file: 'test.txt', text: 'Jenkins SSH Agent works!'
+                      sh 'cat test.txt'
+                      sh 'pwd'
+                      sh 'df -h'
+                    }
+                  }
+                }
+                post {
+                  always {
+                    echo "Pipeline completed on node: \${env.NODE_NAME}"
+                  }
+                }
+              }
+            """.stripIndent())
+            sandbox(true)
+          }
+        }
+      }
+
+      pipelineJob('jnlp-agent-test') {
+        description('Test pipeline running on JNLP (inbound) agent')
+        definition {
+          cps {
+            script("""
+              pipeline {
+                agent { label 'jnlp-agent' }
+                stages {
+                  stage('System Info') {
+                    steps {
+                      echo "Hello from JNLP Agent!"
+                      sh 'hostname'
+                      sh 'whoami'
+                      sh 'java -version'
+                      sh 'uname -a'
+                      sh 'cat /etc/os-release || true'
+                    }
+                  }
+                  stage('Workspace Test') {
+                    steps {
+                      writeFile file: 'test.txt', text: 'Jenkins JNLP Agent works!'
+                      sh 'cat test.txt'
+                      sh 'pwd'
+                      sh 'df -h'
+                    }
+                  }
+                }
+                post {
+                  always {
+                    echo "Pipeline completed on node: \${env.NODE_NAME}"
+                  }
+                }
+              }
+            """.stripIndent())
+            sandbox(true)
+          }
+        }
+      }
+
+      pipelineJob('all-agents-parallel') {
+        description('Run tasks in parallel across all agent types')
+        definition {
+          cps {
+            script("""
+              pipeline {
+                agent none
+                stages {
+                  stage('Parallel Across Agents') {
+                    parallel {
+                      stage('SSH Agent') {
+                        agent { label 'ssh-agent' }
+                        steps {
+                          echo "Running on SSH agent"
+                          sh 'hostname && uname -a'
+                        }
+                      }
+                      stage('JNLP Agent') {
+                        agent { label 'jnlp-agent' }
+                        steps {
+                          echo "Running on JNLP agent"
+                          sh 'hostname && uname -a'
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            """.stripIndent())
+            sandbox(true)
+          }
+        }
+      }

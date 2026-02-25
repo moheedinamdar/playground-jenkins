@@ -1,0 +1,12 @@
+configuration-as-code
+ssh-slaves
+workflow-aggregator
+job-dsl
+git
+docker-workflow
+ssh-credentials
+matrix-auth
+pipeline-stage-view
+timestamper
+ws-cleanup
+antisamy-markup-formatter
