@@ -1,0 +1,18 @@
+# SSH keys (generated locally)
+secrets/
+
+# Environment file (contains JNLP secret)
+.env
+
+# Jenkins master data (if using bind mount)
+jenkins_home/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
